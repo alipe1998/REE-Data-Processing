@@ -1,0 +1,181 @@
+#import relevant python packages
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+!pip install python-ternary 
+import ternary
+import scipy.stats as stats
+import plotly.figure_factory as ff
+from mpl_toolkits.mplot3d import Axes3D
+from google.colab import drive
+drive.mount('/content/drive')
+from google.colab import drive
+
+#filepath = '/content/drive/MyDrive/Lab Work/clean_data_REEproject1.csv' #import data from google drive
+
+#df = pd.read_csv(filepath)
+df.head()
+#drop irrelevant columns
+df = df.drop(['Conc. P stock (ppm)','Conc. P sample (ppm)','Conc. Ce sample (ppm)','Conc. Nd sample (ppm)','Conc. Nd-stock 3 (mmol/kg)','Conc. Ce-stock 2 (mmol/kg)','Conc.Ce dil (mmol/kg)','Conc.Ce ICP-OES (mmol/kg)','Ce precipitate (mole)','Conc.Nd dil (mmol/kg)','Conc.Nd ICP-OES (mmol/kg)','Nd precipitate (mole)','Enthalpy (J/mol)'],axis=1)
+df['Weight in cell (g)'] = df['Weight in cell (g)'].fillna(0) #replace nans with 0's
+df['Weight in cell (g).1'] = df['Weight in cell (g).1'].fillna(0) #replace nan's with 0's
+df = df.drop(0) #drop b/c I don't want the first row 
+df = df.reset_index() #reset the index after I dropped the first row
+df['REE stock ID'] = df['REE stock ID'].astype(str) #make value string values
+df['REE stock ID.1'] = df['REE stock ID.1'].astype(str) 
+
+df['Ce'] = df.apply(lambda row:row['Weight in cell (g)'] if row['REE stock ID'][0:2] == 'Ce' else (row['Weight in cell (g).1'] if row['REE stock ID.1'][0:2] == 'Ce' else 0),axis=1)
+#take all Nd values from 'Weight in cell (g)' or 'Weight in cell (g)'
+df['Nd'] = df.apply(lambda row:row['Weight in cell (g)'] if row['REE stock ID'][0:2] == 'Nd' else (row['Weight in cell (g).1'] if row['REE stock ID.1'][0:2] == 'Nd' else 0),axis=1)
+#take all Pr values from 'Weight in cell (g)' or 'Weight in cell (g)'
+df['Pr'] = df.apply(lambda row:row['Weight in cell (g)'] if row['REE stock ID'][0:2] == 'Pr' else (row['Weight in cell (g).1'] if row['REE stock ID.1'][0:2] == 'Pr' else 0),axis=1)
+#take Sm values 
+df['Sm'] = df.apply(lambda row:row['Weight in cell (g)'] if row['REE stock ID'][0:2] == 'Sm' else (row['Weight in cell (g).1'] if row['REE stock ID.1'][0:2] == 'Sm' else 0),axis=1)
+df.head()
+#normalize values for ternary diagram
+total = df.loc[:,['Ce','Nd','Pr','Sm']].sum(axis=1) #sum values of 
+df1 = df.loc[:,['Ce','Nd','Pr','Sm']].div(total,axis=0) *100 #normalize values of Ce, Nd and Sm
+print('Length of df1 is',len(df1))
+df1.head()
+df1 = df1.rename(columns={"Ce": "Ce%", "Nd": "Nd%",'Pr': 'Pr%','Sm': 'Sm%'}) #change column names to make it easier to merge
+#don't run this text box again or it will keep adding df1 to the right side of df over and over
+df = pd.concat([df, df1],axis=1) #concatenate the df and df1 
+df.head()
+CeNd = df[(df.Type1 == 'Ce') | (df.Type1 == 'Nd') | (df.Type1 == 'CeNd')] #take all values along the Cerium-Neodymium solid solution
+CePr = df[(df.Type1 == 'Ce') | (df.Type1 == 'Pr') | (df.Type1 == 'CePr')] #take all values along the Cerium-Praesodymium solid solution 
+CeSm = df[(df.Type1 == 'Ce') | (df.Type1 == 'Sm') | (df.Type1 == 'CeSm')] #take values along the Cerium-Samarium solid solution
+CeSm = CeSm[CeSm['Enthalpy (J)'].notna()] #remove NaN from the CeSm df
+CePr.head(30)
+# plot enthlapy and temperature distributions 
+fig, axes = plt.subplots(2, 2, figsize=(7, 7))
+
+fig.suptitle(' Figure 1: Temperature and Enthalpy Distribution for Landthanide Series Phosphates',fontsize=15,y=-.01) 
+
+
+#temperature distribution
+sns.distplot(df['dT (°C)'], kde=False, color="b", ax=axes[0, 0],bins=50)
+sns.distplot(df['dT (°C)'], kde=True, hist=False, color="b", ax=axes[0, 1])
+axes[0,0].set_title('Temperature Histogram')
+axes[0,1].set_title('Temperature KDE')
+
+#enthalpy distribution
+sns.distplot(df['Enthalpy (J)'], kde=False, color="b", ax=axes[1,0],bins=50)
+sns.distplot(df['Enthalpy (J)'], kde=True, hist=False, color="b", ax=axes[1,1])
+axes[1,0].set_title('Enthalpy Histogram')
+axes[1,1].set_title('Enthalpy KDE')
+plt.tight_layout()
+
+plt.show()
+
+#make scatter for solid solutions 
+fig, ax = plt.subplots(1,3,figsize=(15,5))
+
+fig.suptitle('Figure 2: Scatter Plots for Enthalpy of Mixing in the Lanthanide Series',fontsize=15,y=-.01)
+
+sns.regplot(x='Nd%',y='Enthalpy (J)',data=CeNd,ax=ax[0],color='xkcd:green',ci=None,marker='o',order=2)
+sns.regplot(x='Pr%',y='Enthalpy (J)',data=CePr,ax=ax[1],color='xkcd:red',ci=None,marker='o',order=2)
+sns.regplot(x='Sm%',y='Enthalpy (J)',data=CeSm,ax=ax[2],color='xkcd:blue',ci=None,marker='o',order=2)
+#sns.regplot(x='',y='Enthalpy (J)',data=CeNd,ax=ax[0],color='b',ci=None,marker='o',order=2)
+#sns.regplot(x='Percent Pr',y='Enthalpy (J)',data=CePr,ax=ax[1],color='g',ci=None,marker='o',order=2)
+#sns.regplot(x='Percent Sm',y='Enthalpy (J)',data=CeSm,ax=ax[2],color='r',ci=None,marker='o',order=2)
+
+ax[0].set_title('Enthalpy for Cerium-Neodymium Series',fontsize=14)
+ax[0].set_ylabel('Enthalpy (J)',fontsize=12)
+ax[0].set_xlabel('% Neodymium')
+
+ax[1].set_title('Enthalpy for Cerium-Praseodymium Series',fontsize=14)
+ax[1].set_ylabel('Enthalpy (J)',fontsize=12)
+ax[1].set_xlabel('% Praesodymium')
+
+ax[2].set_title('Enthalpy for Cerium-Samarium Series',fontsize=14)
+ax[2].set_ylabel('Enthalpy (J)',fontsize=12)
+ax[2].set_xlabel('% Samarium')
+ax[2].set_xlim(0, 100)
+# create ternary diagram
+fig, tax = ternary.figure(scale=100)
+fig.set_size_inches(10, 9)
+tax.scatter(df[['Nd%','Ce%','Pr%']].values) #choose endmembers
+fontsize = 15
+offset = 0.08
+tax.top_corner_label("Cerium", fontsize=fontsize, offset=0.16) #put labels in corners
+tax.left_corner_label("Praseodymium", fontsize=fontsize, offset=offset)
+tax.right_corner_label("Neodymium", fontsize=fontsize, offset=offset)
+tax.set_title("Figure 3: Solid Solution Ternary Diagram", fontsize=15,y=-.02)
+# Decoration.
+tax.boundary(linewidth=1)
+tax.gridlines(multiple=10, color="gray")
+tax.ticks(axis='lbr', linewidth=1, multiple=10)
+tax.get_axes().axis('off')
+
+tax.show()
+
+#  Meaningful Ternary diagram with enthalpy of mixing overlaid. It's interactive too!
+df.drop(df[(df.Type1 == 'Sm') | (df.Type1 == 'CeSm')].index,inplace=True) #get rid of rows that contain samarium values
+T_Ce = df.loc[:,'Ce%'].to_numpy() #convert to numpy array
+T_Nd = df.loc[:,'Nd%'].to_numpy()
+T_Pr = df.loc[:,'Pr%'].to_numpy()
+T_enthalpy = df.loc[:,'Enthalpy (J)'].to_numpy()
+
+#plot the contour map ternary diagram
+fig = ff.create_ternary_contour(np.array([T_Ce, T_Nd, T_Pr]), T_enthalpy, 
+                                pole_labels=['Cerium', 'Praseodymium', 'Neodymium'],
+                                interp_mode='cartesian',  
+                                ncontours=5, 
+                                showmarkers=True,
+                                showscale=True,
+                                colorscale='Viridis',
+                                title='Figure 4: Enthalpy of Mixing Ternary Diagram')                             
+
+fig.show()
+median_CeNd = CeNd['Enthalpy (J)'].median() #calc the median of CeNd Enthalpy
+median_CePr = CePr['Enthalpy (J)'].median()
+median_CeSm = CeSm['Enthalpy (J)'].median()
+
+#KDE plots
+fig, ax = plt.subplots(figsize=[7,8])
+
+fig.suptitle('Figure 5: KDE Plots Showing Enthalpy Distributions',fontsize=15,y=-.01)
+
+sns.kdeplot(CeNd['Enthalpy (J)'], color='xkcd:green') #plot three KDE plots
+sns.kdeplot(CePr['Enthalpy (J)'], color='xkcd:red')
+sns.kdeplot(CeSm['Enthalpy (J)'], color='xkcd:blue')
+
+ax.axvline(median_CeNd,ymin=0, ymax=.95,color='xkcd:green',linestyle='dashed', label='Ce-Nd Median') #plot the median 
+ax.axvline(median_CePr,ymin=0, ymax=.44,color='xkcd:red',linestyle='dashed', label='Ce-Pr Median')
+ax.axvline(median_CeSm,ymin=0, ymax=.48,color='xkcd:blue',linestyle='dashed', label='Ce-Sm Median')
+
+ax.set_title('Comparative Enthalpy Distributions for the Lanthanide Series Solid Solutions')
+
+ax.legend()
+
+#box plots for lanthanide series enthlapy and each solid solution
+
+fig, [ax1, ax2, ax3] = plt.subplots(1,3)
+
+fig.suptitle('Figure 6: Boxplots for Lanthanide Series Solid Solutions',fontsize=13,y=-.01)
+
+sns.boxplot(y=CeNd['Enthalpy (J)'], ax=ax1, color='xkcd:green') #set up boxplots
+sns.boxplot(y=CePr['Enthalpy (J)'], ax=ax2, color='xkcd:red')
+sns.boxplot(y=CeSm['Enthalpy (J)'], ax=ax3, color='xkcd:blue')
+
+ax1.set_title('Ce-Nd')
+ax2.set_title('Ce-Pr')
+ax3.set_title('Ce-Sm')
+
+plt.tight_layout()
+plt.show
+
+print('The median Enthalpy value for the Lanthanide Phosphates:',df['Enthalpy (J)'].median())
+print('The median of Ce-Nd solid solution:',median_CeNd) #print median
+print('The median of Ce-Pr solid solution:',round(median_CePr,3))
+print('The median of Ce-Sm solid solution:',median_CeSm)
+
+print('Ce-Nd 25th, 50th and 75th percentile is',np.percentile(CeNd['Enthalpy (J)'],[25,50,75])) #calc percentile measurements for boxplots above 
+print('Ce-Pr 25th, 50th and 75th percentile is',np.percentile(CePr['Enthalpy (J)'],[25,50,75]))
+print('Ce-Sm 25th, 50th and 75th percentile is',np.percentile(CeSm['Enthalpy (J)'],[25,50,75]))
+
+#perform t-tests comparing enthlapy distribution of the solid solutions
+print('Comparison of Ce-Nd and Ce-Pr solid solution enthalpy distribution:',stats.ttest_ind(CeNd['Enthalpy (J)'],CePr['Enthalpy (J)']))
+print('Comparison of Ce-Nd and Ce-Sm solid solution enthalpy distribution:',stats.ttest_ind(CeNd['Enthalpy (J)'],CeSm['Enthalpy (J)']))
+print('Comparison of Ce-Pr and Ce-Sm solid solution enthalpy distribution:',stats.ttest_ind(CePr['Enthalpy (J)'],CeSm['Enthalpy (J)']))
